@@ -95,6 +95,71 @@ app.get('/rating/:itemId', async (req, res) => {
   }
 });
 
+
+// Проверка статуса голосования пользователя
+app.get('/rating-status/:itemId', async (req, res) => {
+  const { user_hash, user_agent } = req.query;
+
+  if (!user_hash || !user_agent) {
+    return res.status(400).json({ message: 'bad_request' });
+  }
+
+  try {
+    const { data } = await loadVotes();
+    const item = data.items?.[req.params.itemId];
+
+    if (!item) {
+      return res.json({
+        rating: 0,
+        votes: 0,
+        user_voted: false,
+        cooldown_remaining: 0
+      });
+    }
+
+    const now = Date.now();
+
+    const lastVote = [...item.history]
+      .reverse()
+      .find(v =>
+        v.user_hash === user_hash &&
+        v.user_agent === user_agent
+      );
+
+    if (!lastVote) {
+      return res.json({
+        rating: item.rating,
+        votes: item.votes,
+        user_voted: false,
+        cooldown_remaining: 0
+      });
+    }
+
+    const diff = now - lastVote.ts;
+
+    if (diff >= MONTH_MS) {
+      return res.json({
+        rating: item.rating,
+        votes: item.votes,
+        user_voted: false,
+        cooldown_remaining: 0
+      });
+    }
+
+    return res.json({
+      rating: item.rating,
+      votes: item.votes,
+      user_voted: true,
+      cooldown_remaining: MONTH_MS - diff
+    });
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'status_failed' });
+  }
+});
+
+
 app.post('/vote', async (req, res) => {
   const { item_id, vote, user_hash, user_agent } = req.body;
 
